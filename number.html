@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Super Number Slam</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family:'Poppins',sans-serif; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; overflow:hidden; }
+  body { background:#5c94fc; user-select:none; touch-action:manipulation; }
+
+  /* ---- Viewport ---- */
+  #game { position:absolute; inset:0; overflow:hidden; }
+  #sky {
+    position:absolute; inset:0; z-index:0;
+    background:linear-gradient(#5c94fc 0%, #79a8ff 60%, #a8c8ff 100%);
+  }
+
+  /* ---- Scrolling world layer (camera translates this) ---- */
+  #world { position:absolute; left:0; top:0; height:100%; z-index:1; will-change:transform; }
+
+  .cloud {
+    position:absolute; width:120px; height:40px; background:#fff; border-radius:40px;
+    opacity:.9;
+  }
+  .cloud::before, .cloud::after {
+    content:''; position:absolute; background:#fff; border-radius:50%;
+  }
+  .cloud::before { width:55px; height:55px; top:-22px; left:18px; }
+  .cloud::after  { width:42px; height:42px; top:-14px; left:62px; }
+
+  #ground {
+    position:absolute; left:0; bottom:0; height:90px;
+    background:#00a800;
+    border-top:8px solid #008000;
+    box-shadow:inset 0 -40px 0 #007000;
+  }
+  #ground::before {
+    content:''; position:absolute; top:8px; left:0; right:0; height:14px;
+    background:repeating-linear-gradient(90deg,#00c000 0 30px,#00a800 30px 60px);
+  }
+
+  /* ---- Player (lives inside world) ---- */
+  #player {
+    position:absolute; width:46px; height:54px; z-index:5;
+    transition:transform .08s;
+  }
+  #player .hat { position:absolute; top:0; left:5px; width:36px; height:16px; background:#e52521; border-radius:8px 8px 4px 4px; }
+  #player .brim { position:absolute; top:12px; left:2px; width:42px; height:6px; background:#e52521; border-radius:3px; }
+  #player .face { position:absolute; top:16px; left:8px; width:30px; height:22px; background:#ffccaa; border-radius:6px; }
+  #player .eye { position:absolute; top:21px; left:26px; width:5px; height:7px; background:#333; border-radius:2px; }
+  #player .overalls { position:absolute; top:34px; left:6px; width:34px; height:20px; background:#2e4cff; border-radius:4px; }
+  #player .shoe { position:absolute; bottom:-2px; width:16px; height:8px; background:#5a3210; border-radius:4px; }
+  #player .shoe.l { left:4px; } #player .shoe.r { right:4px; }
+  #player.face-left { transform:scaleX(-1); }
+
+  /* ---- Boxes ---- */
+  .box {
+    position:absolute; width:56px; height:56px; z-index:4;
+    background:#f8b800; border:4px solid #a05000; border-radius:8px;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:800; font-size:26px; color:#a05000;
+    box-shadow:inset 0 -6px 0 rgba(0,0,0,.18);
+  }
+  .box .q { text-shadow:0 1px 0 #fff3; }
+  .box.done { background:#9a6b34; color:#5a3210; border-color:#5a3210; }
+  .box.bump { animation:bump .3s ease; }
+  @keyframes bump { 0%{transform:translateY(0)} 40%{transform:translateY(-14px)} 100%{transform:translateY(0)} }
+
+  /* ---- Rings ---- */
+  .ring {
+    position:absolute; width:34px; height:34px; z-index:3;
+    border:7px solid #ffd23f; border-radius:50%;
+    box-shadow:0 0 8px rgba(255,210,63,.7), inset 0 0 4px rgba(180,130,0,.5);
+    animation:spin 1.1s linear infinite;
+  }
+  @keyframes spin { 0%{transform:scaleX(1)} 50%{transform:scaleX(.25)} 100%{transform:scaleX(1)} }
+  .ring.got { animation:ringpop .3s ease forwards; }
+  @keyframes ringpop { to { transform:scale(1.8); opacity:0; } }
+
+  /* ---- HUD ---- */
+  #hud {
+    position:absolute; top:12px; left:0; right:0; z-index:10;
+    display:flex; justify-content:center; gap:10px; pointer-events:none;
+  }
+  #hud .pill {
+    background:rgba(0,0,0,.45); color:#fff; padding:8px 16px; border-radius:20px;
+    font-weight:700; font-size:15px;
+  }
+  #hud .pill.toggle { pointer-events:auto; cursor:pointer; }
+  #hud .pill.toggle.off { opacity:.55; }
+
+  /* ---- Controls ---- */
+  #controls {
+    position:absolute; bottom:14px; left:0; right:0; z-index:10;
+    display:flex; justify-content:space-between; padding:0 18px; pointer-events:none;
+  }
+  #controls .group { display:flex; gap:14px; pointer-events:auto; }
+  .ctrl {
+    width:74px; height:74px; border-radius:50%;
+    background:rgba(255,255,255,.85); border:3px solid rgba(0,0,0,.25);
+    font-size:30px; font-weight:800; color:#333;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 4px 0 rgba(0,0,0,.25); cursor:pointer;
+  }
+  .ctrl:active { transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,.25); }
+  .ctrl.jump { background:#ffd23f; width:90px; height:90px; font-size:18px; }
+
+  /* ---- Modal ---- */
+  .overlay {
+    position:absolute; inset:0; z-index:30;
+    background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity .2s;
+  }
+  .overlay.show { opacity:1; pointer-events:auto; }
+  .card {
+    background:#fff; border-radius:24px; padding:30px 28px; width:min(94vw,620px);
+    text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.4);
+    transform:scale(.85); transition:transform .2s;
+  }
+  .overlay.show .card { transform:scale(1); }
+  .card .sound-label { font-size:16px; color:#666; font-weight:600; }
+  .card .sound { font-size:64px; font-weight:800; color:#e52521; margin:6px 0 4px; letter-spacing:1px; }
+  .card .hint { font-size:14px; color:#888; margin-bottom:18px; }
+  .card input {
+    width:100%; font-size:26px; font-weight:600; text-align:center;
+    padding:12px; border:3px solid #ddd; border-radius:14px; outline:none; text-transform:lowercase;
+  }
+  .card input:focus { border-color:#5c94fc; }
+  .card input.wrong { border-color:#e52521; animation:shake .3s; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
+  .card .feedback { min-height:22px; font-size:15px; font-weight:600; margin:12px 0; }
+  .card .feedback.ok { color:#00a800; }
+  .card .feedback.no { color:#e52521; }
+  .card button {
+    width:100%; font-size:20px; font-weight:700; color:#fff; background:#5c94fc;
+    border:none; border-radius:14px; padding:14px; cursor:pointer; margin-top:4px;
+    box-shadow:0 4px 0 #3a6fd8;
+  }
+  .card button:active { transform:translateY(3px); box-shadow:0 1px 0 #3a6fd8; }
+
+  /* ---- MAB blocks (Maths Suite colours: red hundreds, blue tens, green units) ---- */
+  .placeCols { display:flex; gap:20px; justify-content:center; align-items:flex-start; margin:8px 0 4px; flex-wrap:wrap; }
+  .placeCol h3 { margin:0 0 8px; font-size:14px; font-weight:700; color:#555; }
+  .blockGrid { display:grid; grid-template-columns:repeat(3,auto); gap:8px; justify-content:center; }
+  .blockRow { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; max-width:250px; }
+  .mab { cursor:pointer; border-radius:3px; transition:transform .08s ease; }
+  .mab:active { transform:scale(0.94); }
+  .mab-h { width:52px; height:52px; border:2px solid #e74c3c; background-color:#e74c3c;
+    background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.55) 0,rgba(255,255,255,.55) 1px,transparent 1px,transparent 5.2px),
+                     repeating-linear-gradient(90deg,rgba(255,255,255,.55) 0,rgba(255,255,255,.55) 1px,transparent 1px,transparent 5.2px); }
+  .mab-t { width:17px; height:84px; border:2px solid #3498db; background-color:#3498db;
+    background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.55) 0,rgba(255,255,255,.55) 1px,transparent 1px,transparent 8.4px); }
+  .mab-u { width:24px; height:24px; border:2px solid #2ecc71; background-color:#2ecc71; }
+  .mab.off { background-color:#fff; background-image:none; }
+  .readonly .mab { cursor:default; }
+  .readonly .mab:active { transform:none; }
+
+  /* ---- Number pad (read mode, touch friendly) ---- */
+  #numPad { display:grid; grid-template-columns:repeat(3,68px); gap:7px; justify-content:center; margin-top:10px; }
+  #numPad button { height:48px; font-size:22px; font-weight:700; border:none; border-radius:10px;
+    background:#eef3ff; color:#3a6fd8; cursor:pointer; box-shadow:0 3px 0 #c9d6f2; width:auto; margin:0; padding:0; }
+  #numPad button:active { transform:translateY(2px); box-shadow:0 1px 0 #c9d6f2; }
+
+  /* ---- Big messages ---- */
+  #bigmsg {
+    position:absolute; inset:0; z-index:40;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; opacity:0; pointer-events:none; transition:opacity .3s;
+  }
+  #bigmsg.show { opacity:1; pointer-events:auto; }
+  #bigmsg.level { background:rgba(0,40,120,.8); }
+  #bigmsg.win   { background:rgba(120,0,80,.85); }
+  #bigmsg .title { font-size:clamp(40px,9vw,84px); font-weight:800; color:#ffd23f; text-shadow:0 4px 0 rgba(0,0,0,.3); animation:pop .5s ease; }
+  #bigmsg .sub   { font-size:clamp(18px,4vw,28px); font-weight:600; color:#fff; margin:14px 0 28px; max-width:80vw; }
+  @keyframes pop { 0%{transform:scale(.3);opacity:0} 70%{transform:scale(1.1)} 100%{transform:scale(1);opacity:1} }
+  #bigmsg button {
+    font-size:22px; font-weight:700; color:#333; background:#ffd23f;
+    border:none; border-radius:16px; padding:16px 40px; cursor:pointer; box-shadow:0 5px 0 #c89a00;
+  }
+  #bigmsg button:active { transform:translateY(3px); box-shadow:0 2px 0 #c89a00; }
+  #bigmsg-print {
+    margin-top:14px; font-size:18px; background:#fff; color:#333; box-shadow:0 5px 0 #bbb;
+  }
+  #bigmsg-print:active { box-shadow:0 2px 0 #bbb; }
+
+  .confetti { position:absolute; width:12px; height:12px; top:-20px; z-index:39; animation:fall linear forwards; }
+  @keyframes fall { to { transform:translateY(110vh) rotate(720deg); } }
+
+  #flash {
+    position:absolute; inset:0; z-index:35; background:#ff3300;
+    opacity:0; pointer-events:none;
+  }
+  #flash.show { animation:flashout .5s ease forwards; }
+  @keyframes flashout { 0%{opacity:.7} 100%{opacity:0} }
+
+  /* ---- Start ---- */
+  #start {
+    position:absolute; inset:0; z-index:50; background:#5c94fc;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
+  }
+  #start h1 { font-size:clamp(44px,11vw,90px); font-weight:800; color:#ffd23f; text-shadow:0 5px 0 #c89a00; }
+  #start p { font-size:clamp(15px,3.5vw,20px); color:#fff; margin:16px 0 32px; max-width:80vw; }
+  #start button {
+    font-size:24px; font-weight:700; color:#333; background:#ffd23f;
+    border:none; border-radius:16px; padding:18px 48px; cursor:pointer; box-shadow:0 5px 0 #c89a00;
+  }
+  #start button:active { transform:translateY(3px); box-shadow:0 2px 0 #c89a00; }
+  #start .level-label { font-size:clamp(16px,3vw,20px); color:#fff; font-weight:700; margin-bottom:16px; opacity:.9; }
+  #start .level-buttons { display:flex; flex-wrap:wrap; gap:16px; justify-content:center; }
+  #start .level-btn {
+    font-size:22px; font-weight:700; color:#333; background:#ffd23f;
+    border:none; border-radius:16px; padding:18px 36px; cursor:pointer; box-shadow:0 5px 0 #c89a00;
+  }
+  #start .level-btn:active { transform:translateY(3px); box-shadow:0 2px 0 #c89a00; }
+
+  /* ---- River, bridge, lava ---- */
+  .river {
+    position:absolute; bottom:0; height:90px; z-index:1;
+    background:linear-gradient(#4a9eff 0%, #2e7fe0 60%, #1f63c0 100%);
+    box-shadow:inset 0 6px 0 rgba(255,255,255,.3);
+    overflow:hidden;
+  }
+  .river::before {
+    content:''; position:absolute; top:10px; left:0; right:0; height:6px;
+    background:repeating-linear-gradient(90deg,rgba(255,255,255,.5) 0 14px,transparent 14px 34px);
+  }
+  .bridge {
+    position:absolute; z-index:4; height:18px;
+    background:repeating-linear-gradient(90deg,#a05000 0 18px,#8a4400 18px 22px);
+    border-top:4px solid #c87830; border-radius:3px;
+    box-shadow:0 3px 6px rgba(0,0,0,.3);
+  }
+  .lava {
+    position:absolute; bottom:0; height:90px; z-index:1;
+    background:linear-gradient(#ff8c1a 0%, #ff5a00 50%, #d62800 100%);
+    box-shadow:inset 0 6px 0 rgba(255,230,150,.6);
+    overflow:hidden;
+  }
+  .lava::before {
+    content:''; position:absolute; top:8px; left:0; right:0; height:8px;
+    background:repeating-linear-gradient(90deg,#ffd23f 0 16px,transparent 16px 38px);
+    animation:lavabubble 1.4s linear infinite;
+  }
+  @keyframes lavabubble { 0%{transform:translateX(0)} 100%{transform:translateX(38px)} }
+
+  /* ---- Per-land theming (applied to #game) ---- */
+  /* Grassland (default look already set above) */
+  #game.theme-grass #sky { background:linear-gradient(#5c94fc 0%, #79a8ff 60%, #a8c8ff 100%); }
+
+  /* Cavern / underground */
+  #game.theme-cave #sky { background:linear-gradient(#1a1228 0%, #2a1f3d 60%, #3a2d52 100%); }
+  #game.theme-cave #ground {
+    background:#4a3a28; border-top:8px solid #6a5238;
+    box-shadow:inset 0 -40px 0 #3a2d20;
+  }
+  #game.theme-cave #ground::before {
+    background:repeating-linear-gradient(90deg,#5a4632 0 30px,#4a3a28 30px 60px);
+  }
+  #ceiling { display:none; }
+  #game.theme-cave #ceiling {
+    display:block; position:absolute; left:0; top:0; height:60px; z-index:2;
+    background:#3a2d20; border-bottom:6px solid #2a2018;
+    box-shadow:inset 0 30px 0 #2a2018;
+  }
+
+  /* Sky / clouds */
+  #game.theme-sky #sky { background:linear-gradient(#bfe3ff 0%, #d8f0ff 55%, #eef9ff 100%); }
+  #game.theme-sky #ground {
+    background:#f4f9ff; border-top:8px solid #fff;
+    box-shadow:inset 0 -40px 0 #d6e8f7;
+  }
+  #game.theme-sky #ground::before {
+    background:repeating-linear-gradient(90deg,#ffffff 0 30px,#e8f3fc 30px 60px);
+  }
+
+  /* ---- Spikes (cavern hazard) ---- */
+  .spikes {
+    position:absolute; bottom:0; height:90px; z-index:1; overflow:hidden;
+    background:linear-gradient(#2a1f3d, #14101f);
+  }
+  .spikes::before {
+    content:''; position:absolute; bottom:0; left:0; right:0; height:40px;
+    background:repeating-linear-gradient(90deg, transparent 0 4px, #c0c8d4 4px 14px, transparent 14px 18px);
+    clip-path:polygon(0 100%,4% 0,8% 100%,12% 0,16% 100%,20% 0,24% 100%,28% 0,32% 100%,36% 0,40% 100%,44% 0,48% 100%,52% 0,56% 100%,60% 0,64% 100%,68% 0,72% 100%,76% 0,80% 100%,84% 0,88% 100%,92% 0,96% 100%,100% 0);
+  }
+
+  /* ---- Sky gap (clouds hazard) — a visible hole in the cloud floor ---- */
+  .skygap {
+    position:absolute; bottom:0; height:90px; z-index:2;
+    background:linear-gradient(#bfe3ff 0%, #d8f0ff 60%, #eef9ff 100%);
+    box-shadow:inset 6px 0 8px -4px rgba(120,160,210,.5), inset -6px 0 8px -4px rgba(120,160,210,.5);
+    border-left:3px solid #fff; border-right:3px solid #fff;
+  }
+
+  /* ---- Green pipe ---- */
+  .pipe {
+    position:absolute; bottom:0; width:74px; z-index:4;
+    background:linear-gradient(90deg,#00a800 0%, #4ad44a 25%, #00c000 50%, #008000 80%, #006000 100%);
+    border:4px solid #004000; border-radius:6px 6px 0 0;
+  }
+  .pipe .lip {
+    position:absolute; top:-14px; left:-8px; right:-8px; height:22px;
+    background:linear-gradient(90deg,#00a800 0%, #4ad44a 25%, #00c000 50%, #008000 80%, #006000 100%);
+    border:4px solid #004000; border-radius:8px;
+  }
+  .pipe .arrow {
+    position:absolute; top:6px; left:50%; transform:translateX(-50%);
+    color:#fff; font-size:22px; font-weight:800; opacity:.85; animation:bobdown 1s ease-in-out infinite;
+  }
+  @keyframes bobdown { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(4px)} }
+  /* ---- Certificate (screen: hidden) ---- */
+  #cert { display:none; }
+
+  /* ---- Print button visibility on screen ---- */
+  #hud-print { pointer-events:auto; cursor:pointer; }
+
+  /* ================= PRINT ================= */
+  @media print {
+    html, body {
+      -webkit-print-color-adjust:exact; print-color-adjust:exact;
+      height:auto; overflow:visible; background:#fff; margin:0; padding:0;
+    }
+    /* hide the whole game UI when printing */
+    #game, #hud, #controls, #bigmsg, #start, #flash, #modal, #nameAsk { display:none !important; }
+    /* show the certificate */
+    #cert {
+      display:block !important; position:static;
+      zoom:0.93;   /* Safari print compensation (documented quirk) */
+    }
+    /* margin:0 drops the browser's auto header/footer (URL, date, page number) in Chrome */
+    @page { size:A4 landscape; margin:0; }
+  }
+
+  /* Certificate sheet layout */
+  .cert-sheet {
+    position:relative; width:297mm; max-width:100%; min-height:200mm;
+    margin:0 auto; padding:16mm 18mm; box-sizing:border-box;
+    background:
+      radial-gradient(circle at 12% 8%, rgba(255,210,63,.10) 0 9%, transparent 10%),
+      radial-gradient(circle at 90% 94%, rgba(92,148,252,.09) 0 9%, transparent 10%),
+      linear-gradient(160deg, #eaf4ff 0%, #fdfbef 45%, #fff6f0 100%);
+    text-align:center; overflow:hidden; color:#222;
+  }
+  /* layered decorative border */
+  .cert-frame {
+    position:absolute; inset:6mm; border-radius:14px;
+    border:6px solid #5c94fc;
+    box-shadow:0 0 0 5px #ffd23f, inset 0 0 0 5px #ffd23f;
+    pointer-events:none;
+  }
+  .cert-frame::before {
+    content:''; position:absolute; inset:5px; border-radius:9px;
+    border:2px dashed rgba(92,148,252,.5);
+  }
+  .cert-inner { position:relative; z-index:2; }
+
+  /* banner ribbon behind the title */
+  .cert-banner {
+    display:inline-block; position:relative; margin-top:2mm;
+    padding:6px 34px; background:linear-gradient(#ffe27a,#ffd23f);
+    border:3px solid #e0a800; border-radius:8px;
+    box-shadow:0 4px 0 #c89a00;
+  }
+  .cert-banner::before, .cert-banner::after {
+    content:''; position:absolute; top:50%; width:0; height:0;
+    border:14px solid #e0a800; transform:translateY(-50%);
+  }
+  .cert-banner::before { left:-26px; border-right-color:#e0a800; border-left-color:transparent; border-top-color:transparent; border-bottom-color:transparent; }
+  .cert-banner::after  { right:-26px; border-left-color:#e0a800; border-right-color:transparent; border-top-color:transparent; border-bottom-color:transparent; }
+  .cert-title {
+    font-size:46px; font-weight:800; color:#e52521; letter-spacing:2px;
+    text-shadow:2px 2px 0 #fff, 4px 4px 0 rgba(0,0,0,.12);
+  }
+  .cert-sub { font-size:18px; font-weight:700; color:#5c94fc; margin-top:5mm; letter-spacing:1px; }
+  .cert-awarded { font-size:14px; color:#888; margin-top:7mm; font-weight:600; text-transform:uppercase; letter-spacing:2px; }
+  .cert-name {
+    font-size:38px; font-weight:800; color:#222; margin:1mm 0 0;
+    display:inline-block; padding:0 14mm 2mm;
+    background:linear-gradient(transparent 70%, rgba(255,210,63,.45) 70%);
+  }
+  .cert-class { font-size:16px; font-weight:700; color:#5c94fc; margin-top:1mm; }
+  .cert-stats {
+    display:inline-block; font-size:14px; font-weight:700; color:#fff; margin-top:5mm;
+    background:linear-gradient(#37c837,#1ca81c); padding:6px 18px; border-radius:20px;
+    box-shadow:0 3px 0 #138012;
+  }
+  .cert-words-label { font-size:13px; font-weight:800; color:#5c94fc; margin-top:7mm; text-transform:uppercase; letter-spacing:2px; }
+  .cert-words { display:flex; flex-wrap:wrap; justify-content:center; gap:7px 9px; margin-top:4mm; max-width:230mm; margin-left:auto; margin-right:auto; }
+  .cert-chip {
+    display:inline-flex; align-items:center; gap:7px;
+    background:linear-gradient(#fff,#fff3d0); border:2px solid #f8b800; border-radius:12px;
+    padding:6px 13px; font-size:14px; box-shadow:0 2px 0 rgba(224,168,0,.4);
+  }
+  .cert-chip .s {
+    font-weight:800; color:#fff; background:#e52521; border-radius:6px; padding:1px 7px; font-size:13px;
+  }
+  .cert-chip .w { font-weight:700; color:#333; }
+  .cert-foot { display:flex; justify-content:space-between; align-items:flex-end; margin-top:8mm; padding:0 4mm; }
+  .cert-date { font-size:13px; color:#555; font-weight:700; border-top:2px solid #333; padding-top:4px; min-width:60mm; }
+  .cert-sealwrap { text-align:center; }
+  .cert-seal {
+    width:60px; height:60px; border-radius:50%; margin:0 auto;
+    background:radial-gradient(#ffe27a,#ffb300); border:4px solid #fff;
+    box-shadow:0 0 0 3px #e0a800; display:flex; align-items:center; justify-content:center;
+    font-size:30px;
+  }
+  .cert-seal-label { font-size:10px; font-weight:800; color:#a05000; letter-spacing:1px; margin-top:2px; }
+
+  /* decorative game graphics */
+  .cert-deco { position:absolute; z-index:1; }
+  .cert-ring {
+    border-radius:50%; box-shadow:0 0 8px rgba(255,210,63,.6);
+    border-style:solid; border-color:#ffd23f;
+  }
+  .cert-star {
+    color:#ffd23f; text-shadow:0 2px 3px rgba(0,0,0,.15);
+    line-height:1;
+  }
+  .cert-box {
+    background:#f8b800; border:4px solid #a05000; border-radius:8px;
+    display:flex; align-items:center; justify-content:center; font-weight:800; color:#a05000;
+    box-shadow:inset 0 -5px 0 rgba(0,0,0,.18);
+  }
+  .cert-hero {
+    position:absolute; z-index:3; top:7mm; left:50%; transform:translateX(-50%) scale(1.25);
+    width:46px; height:54px;
+  }
+  .cert-hero .hat { position:absolute; top:0; left:5px; width:36px; height:16px; background:#e52521; border-radius:8px 8px 4px 4px; }
+  .cert-hero .brim { position:absolute; top:12px; left:2px; width:42px; height:6px; background:#e52521; border-radius:3px; }
+  .cert-hero .face { position:absolute; top:16px; left:8px; width:30px; height:22px; background:#ffccaa; border-radius:6px; }
+  .cert-hero .eye { position:absolute; top:21px; left:26px; width:5px; height:7px; background:#333; border-radius:2px; }
+  .cert-hero .overalls { position:absolute; top:34px; left:6px; width:34px; height:20px; background:#2e4cff; border-radius:4px; }
+  .cert-hero .shoe { position:absolute; bottom:-2px; width:16px; height:8px; background:#5a3210; border-radius:4px; }
+  .cert-hero .shoe.l { left:4px; } .cert-hero .shoe.r { right:4px; }
+
+  /* Name-entry prompt (screen) */
+  #nameAsk {
+    position:absolute; inset:0; z-index:45; background:rgba(0,0,0,.6);
+    display:none; align-items:center; justify-content:center;
+  }
+  #nameAsk.show { display:flex; }
+  #nameAsk .card { background:#fff; border-radius:24px; padding:28px; width:min(86vw,400px); text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.4); }
+  #nameAsk h2 { font-size:22px; font-weight:800; color:#5c94fc; margin-bottom:14px; }
+  #nameAsk label { display:block; text-align:left; font-size:13px; font-weight:700; color:#888; margin:10px 2px 4px; }
+  #nameAsk input { width:100%; font-size:20px; text-align:center; padding:11px; border:3px solid #ddd; border-radius:14px; outline:none; }
+  #nameAsk input:focus { border-color:#5c94fc; }
+  #nameAsk .row { display:flex; gap:10px; margin-top:18px; }
+  #nameAsk button { flex:1; font-size:18px; font-weight:700; color:#fff; background:#5c94fc; border:none; border-radius:14px; padding:13px; cursor:pointer; box-shadow:0 4px 0 #3a6fd8; }
+  #nameAsk button.skip { background:#bbb; box-shadow:0 4px 0 #999; }
+  #nameAsk button:active { transform:translateY(3px); }
+</style>
+</head>
+<body>
+
+<div id="game">
+  <div id="sky"></div>
+  <div id="world">
+    <div id="ceiling"></div>
+    <div id="ground"></div>
+    <div id="player">
+      <div class="hat"></div><div class="brim"></div>
+      <div class="face"></div><div class="eye"></div>
+      <div class="overalls"></div>
+      <div class="shoe l"></div><div class="shoe r"></div>
+    </div>
+  </div>
+</div>
+
+<div id="hud">
+  <div class="pill" id="hud-level">Level 1</div>
+  <div class="pill" id="hud-rings">&#128141; 0</div>
+  <div class="pill" id="hud-progress">0 / 0</div>
+  <div class="pill toggle" id="hud-sound">&#128266;</div>
+  <div class="pill toggle" id="hud-print">&#128424;&#65039; Print</div>
+</div>
+
+<div id="controls">
+  <div class="group">
+    <div class="ctrl" id="btn-left">&#9664;</div>
+    <div class="ctrl" id="btn-right">&#9654;</div>
+    <div class="ctrl" id="btn-down">&#9660;</div>
+  </div>
+  <div class="group">
+    <div class="ctrl jump" id="btn-jump">JUMP</div>
+  </div>
+</div>
+
+<div class="overlay" id="modal">
+  <div class="card">
+    <div class="sound-label" id="modal-label">Make this number with blocks!</div>
+    <div class="sound" id="modal-sound">45</div>
+    <div class="hint" id="modal-hint"></div>
+    <div id="modal-build" class="placeCols"></div>
+    <div id="modal-read" style="display:none">
+      <div id="modal-blocks" class="placeCols readonly"></div>
+      <input id="modal-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="type the number" maxlength="3">
+      <div id="numPad"></div>
+    </div>
+    <div class="feedback" id="modal-feedback"></div>
+    <button id="modal-submit">Check</button>
+  </div>
+</div>
+
+<div id="flash"></div>
+
+<div id="bigmsg">
+  <div class="title" id="bigmsg-title"></div>
+  <div class="sub" id="bigmsg-sub"></div>
+  <button id="bigmsg-btn"></button>
+  <button id="bigmsg-print">&#128424;&#65039; Print Certificate</button>
+</div>
+
+<!-- Certificate (hidden on screen, shown only when printing) -->
+<div id="cert">
+  <div class="cert-sheet">
+    <div class="cert-frame"></div>
+
+    <!-- decorative game graphics scattered around -->
+    <div class="cert-deco cert-ring" style="width:50px;height:50px;border-width:10px;top:13mm;left:13mm;"></div>
+    <div class="cert-deco cert-ring" style="width:34px;height:34px;border-width:7px;top:30mm;left:24mm;border-color:#ffb300;"></div>
+    <div class="cert-deco cert-ring" style="width:50px;height:50px;border-width:10px;bottom:15mm;right:14mm;"></div>
+    <div class="cert-deco cert-box" style="width:48px;height:48px;font-size:24px;top:13mm;right:14mm;transform:rotate(9deg);"><span>?</span></div>
+    <div class="cert-deco cert-box" style="width:40px;height:40px;font-size:20px;bottom:14mm;left:14mm;transform:rotate(-9deg);"><span>?</span></div>
+    <div class="cert-deco cert-star" style="font-size:30px;top:40mm;right:20mm;">&#9733;</div>
+    <div class="cert-deco cert-star" style="font-size:22px;bottom:34mm;left:28mm;">&#9733;</div>
+    <div class="cert-deco cert-star" style="font-size:18px;top:24mm;left:46mm;color:#ffb300;">&#9733;</div>
+
+    <div class="cert-inner">
+      <div class="cert-hero">
+        <div class="hat"></div><div class="brim"></div>
+        <div class="face"></div><div class="eye"></div>
+        <div class="overalls"></div>
+        <div class="shoe l"></div><div class="shoe r"></div>
+      </div>
+      <div style="height:18mm;"></div>
+      <div class="cert-banner"><span class="cert-title">SUPER NUMBER SLAM</span></div>
+      <div class="cert-sub">Certificate of Maths Achievement</div>
+      <div class="cert-awarded">Awarded to</div>
+      <div class="cert-name" id="cert-name">Maths Star</div>
+      <div class="cert-class" id="cert-class"></div>
+      <div class="cert-stats" id="cert-stats"></div>
+      <div class="cert-words-label">Numbers mastered</div>
+      <div class="cert-words" id="cert-words"></div>
+      <div class="cert-foot">
+        <div class="cert-date" id="cert-date"></div>
+        <div class="cert-sealwrap">
+          <div class="cert-seal">&#11088;</div>
+          <div class="cert-seal-label">MATHS STAR</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="nameAsk">
+  <div class="card">
+    <h2>Whose certificate is this?</h2>
+    <label for="nameInput">Name</label>
+    <input id="nameInput" type="text" placeholder="Type your name" autocomplete="off" maxlength="28">
+    <label for="classInput">Class</label>
+    <input id="classInput" type="text" placeholder="e.g. 3B" autocomplete="off" maxlength="20">
+    <div class="row">
+      <button class="skip" id="nameSkip">Skip</button>
+      <button id="namePrint">Print!</button>
+    </div>
+  </div>
+</div>
+
+<div id="start">
+  <h1>Super Number Slam</h1>
+  <p>Walk the world, jump to slam the boxes, and make or read the number! Cross the bridges, leap the lava, and grab the rings.</p>
+  <div class="level-label">Choose a level</div>
+  <div class="level-buttons">
+    <button class="level-btn" data-level="0">Level 1</button>
+    <button class="level-btn" data-level="1">Level 2</button>
+    <button class="level-btn" data-level="2">Level 3</button>
+  </div>
+</div>
+
+<script>
+/* ---------------- Sound engine (Web Audio, no files) ---------------- */
+const Sound = (function(){
+  let ctx = null;
+  let on = true;
+  let musicTimer = null;
+  let musicGain = null;
+  let currentTrack = null;
+  let step = 0;
+
+  function ensure(){
+    if(!ctx){
+      try { ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch(e){ ctx = null; }
+    }
+    if(ctx && ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+
+  // one-shot beep
+  function blip(freq, dur, type, vol){
+    if(!on || !ensure()) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = type || 'square';
+    o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol || 0.18, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+
+  // coin: two quick rising notes
+  function coin(){
+    blip(988, 0.08, 'square', 0.16);
+    setTimeout(()=>blip(1319, 0.16, 'square', 0.16), 70);
+  }
+  // box bonk: short low thud
+  function bonk(){
+    if(!on || !ensure()) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(220, t);
+    o.frequency.exponentialRampToValueAtTime(90, t + 0.18);
+    g.gain.setValueAtTime(0.25, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(t); o.stop(t + 0.22);
+  }
+  // correct answer chime
+  function correct(){
+    blip(523,0.1,'square',0.15);
+    setTimeout(()=>blip(659,0.1,'square',0.15),90);
+    setTimeout(()=>blip(784,0.18,'square',0.15),180);
+  }
+  // level-up / win fanfare
+  function fanfare(){
+    const notes=[523,659,784,1047,784,1047];
+    notes.forEach((n,i)=>setTimeout(()=>blip(n,0.18,'square',0.16), i*120));
+  }
+  // pipe whoosh
+  function pipe(){
+    if(!on || !ensure()) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type='sine';
+    o.frequency.setValueAtTime(660, t);
+    o.frequency.exponentialRampToValueAtTime(120, t + 0.35);
+    g.gain.setValueAtTime(0.2, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(t); o.stop(t + 0.42);
+  }
+
+  // simple looping melodies per land (arrays of [freq or 0 for rest])
+  const TRACKS = {
+    grass: { tempo:200, wave:'square', notes:[523,659,784,659,587,523,0,587,659,523,494,523,0,0] },
+    cave:  { tempo:260, wave:'triangle', notes:[262,0,247,0,220,0,247,0,196,0,220,0,165,0] },
+    sky:   { tempo:230, wave:'sine', notes:[784,880,1047,880,784,698,784,0,659,698,784,0,0,0] }
+  };
+
+  function startMusic(name){
+    stopMusic();
+    currentTrack = name;
+    if(!on || !ensure()) return;
+    const track = TRACKS[name]; if(!track) return;
+    step = 0;
+    musicTimer = setInterval(()=>{
+      if(!on || !ctx){ return; }
+      const f = track.notes[step % track.notes.length];
+      step++;
+      if(f>0){
+        const t = ctx.currentTime;
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = track.wave;
+        o.frequency.setValueAtTime(f, t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.06, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + track.tempo/1000*0.9);
+        o.connect(g); g.connect(ctx.destination);
+        o.start(t); o.stop(t + track.tempo/1000);
+      }
+    }, track.tempo);
+  }
+  function stopMusic(){
+    if(musicTimer){ clearInterval(musicTimer); musicTimer = null; }
+  }
+  function toggle(){
+    on = !on;
+    if(!on){ stopMusic(); }
+    else if(currentTrack){ startMusic(currentTrack); }
+    return on;
+  }
+  function isOn(){ return on; }
+
+  return { coin, bonk, correct, fanfare, pipe, startMusic, stopMusic, toggle, isOn, ensure };
+})();
+
+/* ---------------- Data (maths) ---------------- */
+const LEVEL_COUNT = 3;
+const BOXES_PER_LEVEL = 10;
+
+function randTarget(levelIdx){
+  if(levelIdx === 1) return 10 + Math.floor(Math.random()*90);    // 10-99
+  if(levelIdx === 2) return 100 + Math.floor(Math.random()*900);  // 100-999
+  return Math.floor(Math.random()*10);                            // 0-9
+}
+function digitsOf(n){ return { h: Math.floor(n/100), t: Math.floor(n/10)%10, u: n%10 }; }
+function makeChallenges(levelIdx){
+  const out = [];
+  for(let i=0;i<BOXES_PER_LEVEL;i++){
+    const type = Math.random() < 0.5 ? 'build' : 'read';
+    let target = randTarget(levelIdx);
+    if(type === 'build' && target === 0) target = 1 + Math.floor(Math.random()*9); // avoid "make 0"
+    out.push({ type, target });
+  }
+  return out;
+}
+function placesForLevel(levelIdx){
+  if(levelIdx === 2) return [['Hundreds','mab-h'],['Tens','mab-t'],['Units','mab-u']];
+  if(levelIdx === 1) return [['Tens','mab-t'],['Units','mab-u']];
+  return [['Units','mab-u']];
+}
+function placeCol(title, cls, count, interactive){
+  const col = document.createElement('div'); col.className = 'placeCol';
+  const h = document.createElement('h3'); h.textContent = title; col.appendChild(h);
+  const wrap = document.createElement('div');
+  wrap.className = (cls === 'mab-t') ? 'blockRow' : 'blockGrid';
+  const n = interactive ? 9 : count;
+  for(let i=0;i<n;i++){
+    const b = document.createElement('div');
+    b.className = 'mab ' + cls + (interactive ? ' off' : '');
+    if(interactive){ b.addEventListener('click', function(){ this.classList.toggle('off'); }); }
+    wrap.appendChild(b);
+  }
+  col.appendChild(wrap);
+  return col;
+}
+
+/* ------------- World constants ------------- */
+const GROUND_Y = 90;        // ground height
+const PLAYER_H = 54;
+const PLAYER_W = 46;
+const BOX_SPACING = 660;    // horizontal distance between boxes (3x for walking room)
+const START_PAD = 180;      // empty run-up before first box
+const END_PAD = 220;        // run-out after last box
+const ROW_HEIGHTS = [170, 230]; // alternating box heights above ground
+
+// per-level theming: css class on #game, the deadly-pit visual class, and the bridge-crossing visual
+const THEMES = [
+  { name:'grass', cls:'theme-grass', crossing:'river', deadly:'lava'   },
+  { name:'cave',  cls:'theme-cave',  crossing:'river', deadly:'spikes' },
+  { name:'sky',   cls:'theme-sky',   crossing:'river', deadly:'skygap' }
+];
+
+let levelIndex = 0;
+let boxes = [];
+let rings = [];
+let deadlyPits = [];    // {x1, x2} world ranges that kill on landing (lava/spikes/sky-gap)
+let pipes = [];         // {x1, x2, top} green pipes the player can enter
+let ringCount = 0;
+let currentBox = null;
+let worldWidth = 0;
+let inUnderground = false;
+let savedSurface = null; // {px, returnX} to restore when coming back up
+let playerName = '';
+let playerClass = '';
+// records each solved box. {target, type, level}
+const achievements = [];
+function recordAnswer(ch){
+  achievements.push({ target: ch.target, type: ch.type, level: levelIndex+1 });
+}
+
+const game = document.getElementById('game');
+const world = document.getElementById('world');
+const ground = document.getElementById('ground');
+const ceiling = document.getElementById('ceiling');
+const player = document.getElementById('player');
+
+let px = START_PAD, py = 0;   // player position in WORLD coords (px from world left)
+let vx = 0, vy = 0, onGround = true, facing = 1;
+const SPEED = 4.4, GRAVITY = 0.9, JUMP_V = 22;
+const keys = { left:false, right:false, down:false };
+
+/* ------------- Build level ------------- */
+function buildLevel(){
+  boxes.forEach(b => b.el.remove());
+  rings.forEach(r => r.el.remove());
+  document.querySelectorAll('#world .cloud, #world .river, #world .bridge, #world .lava, #world .spikes, #world .skygap, #world .pipe').forEach(c=>c.remove());
+  boxes = [];
+  rings = [];
+  deadlyPits = [];
+  pipes = [];
+  inUnderground = false;
+  savedSurface = null;
+
+  const theme = THEMES[levelIndex];
+  game.className = theme.cls;
+
+  const challenges = makeChallenges(levelIndex);
+  worldWidth = START_PAD + challenges.length * BOX_SPACING + END_PAD;
+
+  world.style.width = worldWidth + 'px';
+  ground.style.width = worldWidth + 'px';
+  ceiling.style.width = worldWidth + 'px';
+
+  challenges.forEach((ch,i) => {
+    const el = document.createElement('div');
+    el.className = 'box';
+    el.innerHTML = '<span class="q">?</span>';
+    const cx = START_PAD + i * BOX_SPACING;
+    const yAbove = ROW_HEIGHTS[i % ROW_HEIGHTS.length];
+    el.style.left = (cx - 28) + 'px';
+    el.style.bottom = (GROUND_Y + yAbove) + 'px';
+    world.appendChild(el);
+    boxes.push({ el, ch, id:i, done:false, cx, yAbove });
+  });
+
+  // sporadic rings scattered along the world, mostly in the gaps
+  for(let x = START_PAD + 120; x < worldWidth - END_PAD; x += 90 + Math.random()*140){
+    if(Math.random() < 0.55) continue;
+    spawnRing(x, 20 + Math.random()*200);
+  }
+
+  // clouds only in grass + sky themes
+  if(theme.name !== 'cave'){
+    for(let i=0;i<Math.ceil(worldWidth/400);i++){
+      const c = document.createElement('div');
+      c.className = 'cloud';
+      c.style.left = (Math.random()*worldWidth) + 'px';
+      c.style.top = (40 + Math.random()*220) + 'px';
+      world.appendChild(c);
+    }
+  }
+
+  // hazards between boxes: even gaps -> safe crossing (river+bridge),
+  // odd gaps -> deadly pit (themed: lava / spikes / sky-gap) the player must jump
+  for(let i=0;i<challenges.length-1;i++){
+    const mid = START_PAD + i*BOX_SPACING + BOX_SPACING/2;
+    if(i % 2 === 0){
+      const w = 150;
+      const river = document.createElement('div');
+      river.className = theme.crossing;
+      river.style.left = (mid - w/2) + 'px';
+      river.style.width = w + 'px';
+      world.appendChild(river);
+      const bridge = document.createElement('div');
+      bridge.className = 'bridge';
+      bridge.style.left = (mid - w/2 - 14) + 'px';
+      bridge.style.width = (w + 28) + 'px';
+      bridge.style.bottom = (GROUND_Y - 6) + 'px';
+      world.appendChild(bridge);
+    } else {
+      const w = 130;
+      const pit = document.createElement('div');
+      pit.className = theme.deadly;
+      pit.style.left = (mid - w/2) + 'px';
+      pit.style.width = w + 'px';
+      world.appendChild(pit);
+      deadlyPits.push({ x1: mid - w/2, x2: mid + w/2 });
+    }
+  }
+
+  // green pipes: place on even gaps (safe crossings), spaced through the level
+  const evenGaps = [];
+  for(let g=0; g<challenges.length-1; g+=2) evenGaps.push(g);
+  // choose up to two: one early, one mid
+  const chosen = [];
+  if(evenGaps.length) chosen.push(evenGaps[Math.min(1, evenGaps.length-1)]);          // ~2nd safe gap
+  if(evenGaps.length>2) chosen.push(evenGaps[Math.floor(evenGaps.length/2)]);          // middle safe gap
+  [...new Set(chosen)].forEach(gi=>{
+    const mid = START_PAD + gi*BOX_SPACING + BOX_SPACING/2;
+    spawnPipe(mid + 150);   // sit just past the bridge so it's on solid ground
+  });
+
+  px = START_PAD; py = 0; vx = 0; vy = 0; onGround = true; facing = 1;
+  updateHud();
+  updateCamera();
+  Sound.startMusic(theme.name);
+}
+
+function spawnRing(rx, ry){
+  const el = document.createElement('div');
+  el.className = 'ring';
+  el.style.left = (rx - 17) + 'px';
+  el.style.bottom = (GROUND_Y + ry) + 'px';
+  world.appendChild(el);
+  rings.push({ el, cx:rx, cy:ry, got:false });
+}
+
+function spawnPipe(cx){
+  const W = 74, H = 70;
+  const el = document.createElement('div');
+  el.className = 'pipe';
+  el.style.left = (cx - W/2) + 'px';
+  el.style.height = H + 'px';
+  el.innerHTML = '<div class="lip"></div><div class="arrow">&#9660;</div>';
+  world.appendChild(el);
+  pipes.push({ x1:cx - W/2, x2:cx + W/2, top:H });
+}
+
+function updateRings(){
+  document.getElementById('hud-rings').innerHTML = '\uD83D\uDC8D ' + ringCount;
+}
+
+function updateHud(){
+  document.getElementById('hud-level').textContent = 'Level ' + (levelIndex+1);
+  const done = boxes.filter(b=>b.done).length;
+  document.getElementById('hud-progress').textContent = done + ' / ' + boxes.length;
+}
+
+/* ------------- Camera ------------- */
+let camX = 0;
+function updateCamera(){
+  const vw = window.innerWidth;
+  // keep player centred, clamped to world edges
+  let target = px + PLAYER_W/2 - vw/2;
+  target = Math.max(0, Math.min(worldWidth - vw, target));
+  if(worldWidth < vw) target = 0;
+  camX = target;
+  world.style.transform = 'translateX(' + (-camX) + 'px)';
+}
+
+/* ------------- Input ------------- */
+function bindHold(id, on, off){
+  const el = document.getElementById(id);
+  const start = e => { e.preventDefault(); on(); };
+  const end   = e => { e.preventDefault(); off(); };
+  el.addEventListener('touchstart', start, {passive:false});
+  el.addEventListener('touchend', end);
+  el.addEventListener('touchcancel', end);
+  el.addEventListener('mousedown', start);
+  el.addEventListener('mouseup', end);
+  el.addEventListener('mouseleave', end);
+}
+bindHold('btn-left',  ()=>keys.left=true,  ()=>keys.left=false);
+bindHold('btn-right', ()=>keys.right=true, ()=>keys.right=false);
+bindHold('btn-down',  ()=>{ keys.down=true; tryPipe(); }, ()=>keys.down=false);
+document.getElementById('btn-jump').addEventListener('touchstart', e=>{e.preventDefault();jump();}, {passive:false});
+document.getElementById('btn-jump').addEventListener('mousedown', e=>{e.preventDefault();jump();});
+
+document.addEventListener('keydown', e=>{
+  if(document.getElementById('modal').classList.contains('show')) return;
+  if(e.key==='ArrowLeft') keys.left=true;
+  if(e.key==='ArrowRight') keys.right=true;
+  if(e.key==='ArrowDown'){ keys.down=true; tryPipe(); }
+  if(e.key===' '||e.key==='ArrowUp'){ e.preventDefault(); jump(); }
+});
+document.addEventListener('keyup', e=>{
+  if(e.key==='ArrowLeft') keys.left=false;
+  if(e.key==='ArrowRight') keys.right=false;
+  if(e.key==='ArrowDown') keys.down=false;
+});
+function jump(){ if(onGround){ vy = JUMP_V; onGround = false; } }
+
+function hazardDeath(){
+  const flash = document.getElementById('flash');
+  flash.classList.remove('show');
+  void flash.offsetWidth;   // restart animation
+  flash.classList.add('show');
+  // respawn: at level start on the surface, or pipe-entry on underground
+  if(inUnderground){ exitUnderground(); }
+  else { px = START_PAD; py = 0; vx = 0; vy = 0; onGround = true; }
+}
+
+/* ---- Underground bonus area (entered via pipe) ---- */
+const UG_PAD = 140;
+const UG_RINGS = 10;
+let ugWidth = 0;
+
+function tryPipe(){
+  if(!onGround) return;
+  const feet = px + PLAYER_W/2;
+  for(const p of pipes){
+    if(feet > p.x1 && feet < p.x2){
+      if(p.exit) exitUnderground();
+      else if(!inUnderground) enterUnderground();
+      return;
+    }
+  }
+}
+
+function enterUnderground(){
+  Sound.pipe();
+  // remember which boxes are already done so we can restore on return
+  savedSurface = { px: px, done: boxes.filter(b=>b.done).map(b=>b.id) };
+  inUnderground = true;
+  game.classList.add('theme-cave');
+  game.classList.add('underground');
+
+  // remove surface scenery
+  document.querySelectorAll('#world .box, #world .cloud, #world .river, #world .bridge, #world .lava, #world .spikes, #world .skygap, #world .pipe, #world .ring').forEach(c=>c.remove());
+
+  ugWidth = UG_PAD*2 + UG_RINGS*120 + 200;
+  world.style.width = ugWidth + 'px';
+  ground.style.width = ugWidth + 'px';
+  ceiling.style.width = ugWidth + 'px';
+  worldWidth = ugWidth;
+
+  rings = [];
+  for(let i=0;i<UG_RINGS;i++){
+    spawnRing(UG_PAD + 80 + i*120, 30 + (i%2)*70);
+  }
+  pipes = [];
+  spawnPipe(ugWidth - UG_PAD);
+  pipes.forEach(p=>p.exit = true);
+
+  px = UG_PAD; py = 0; vx = 0; vy = 0; onGround = true; facing = 1;
+  boxes = [];        // none underground
+  deadlyPits = [];
+  updateCamera();
+  Sound.startMusic('cave');
+}
+
+function exitUnderground(){
+  Sound.pipe();
+  inUnderground = false;
+  game.classList.remove('underground');
+  const ret = savedSurface ? savedSurface.px : START_PAD;
+  const doneIds = savedSurface ? savedSurface.done : [];
+  buildLevel();      // rebuild surface (resets boxes to not-done)
+  // restore completed boxes
+  boxes.forEach(b=>{
+    if(doneIds.includes(b.id)){
+      b.done = true;
+      b.el.classList.add('done');
+      b.el.querySelector('.q').textContent = '\u2713';
+    }
+  });
+  updateHud();
+  px = Math.min(ret, worldWidth - PLAYER_W);
+  py = 0; vx = 0; vy = 0; onGround = true;
+  updateCamera();
+}
+
+/* ------------- Loop ------------- */
+let running = false;
+function loop(){
+  if(!running){ requestAnimationFrame(loop); return; }
+  const paused = document.getElementById('modal').classList.contains('show')
+              || document.getElementById('bigmsg').classList.contains('show');
+  if(!paused){
+    vx = (keys.right?SPEED:0) - (keys.left?SPEED:0);
+    if(vx>0) facing=1; else if(vx<0) facing=-1;
+    px += vx;
+    px = Math.max(0, Math.min(worldWidth - PLAYER_W, px));
+
+    vy -= GRAVITY;
+    py += vy;
+
+    // is the player's feet horizontally over a deadly pit (a real hole in the ground)?
+    const feet = px + PLAYER_W/2;
+    let overPit = false;
+    for(const pit of deadlyPits){
+      if(feet > pit.x1 && feet < pit.x2){ overPit = true; break; }
+    }
+
+    if(py <= 0){
+      if(overPit){
+        // no ground here — keep falling into the hole
+        if(py < -160){ hazardDeath(); }   // fell to the bottom -> die & respawn
+      } else {
+        py = 0; vy = 0; onGround = true;   // solid ground catches the player
+      }
+    }
+
+    if(vy > 0){
+      const head = py + PLAYER_H;
+      const pcx = px + PLAYER_W/2;
+      boxes.forEach(b=>{
+        if(b.done) return;
+        if(pcx > b.cx-30 && pcx < b.cx+30 && head >= b.yAbove && head <= b.yAbove+30){
+          vy = -2;
+          Sound.bonk();
+          openModal(b);
+        }
+      });
+    }
+
+    player.style.left = px + 'px';
+    player.style.bottom = (GROUND_Y + py) + 'px';
+    player.className = facing<0 ? 'face-left' : '';
+
+    // ring collection (touch to collect)
+    const pcx2 = px + PLAYER_W/2;
+    const pcy = py + PLAYER_H/2;          // player centre height above ground
+    rings.forEach(r=>{
+      if(r.got) return;
+      const dx = pcx2 - r.cx;
+      const dy = pcy - (r.cy + 17);
+      if(dx*dx + dy*dy < 38*38){
+        r.got = true;
+        r.el.classList.add('got');
+        setTimeout(()=>r.el.remove(), 300);
+        ringCount++;
+        updateRings();
+        Sound.coin();
+      }
+    });
+
+    updateCamera();
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ------------- Modal ------------- */
+const modal = document.getElementById('modal');
+const mInput = document.getElementById('modal-input');
+const mFeedback = document.getElementById('modal-feedback');
+
+const HINTS = [
+  'Tap the green blocks to make the number.',
+  'Blue sticks are tens, green squares are units.',
+  'Red flats are hundreds, blue sticks are tens, green squares are units.'
+];
+function openModal(box){
+  currentBox = box;
+  box.el.classList.add('bump');
+  setTimeout(()=>box.el.classList.remove('bump'), 300);
+  const ch = box.ch;
+  const buildWrap = document.getElementById('modal-build');
+  const readWrap = document.getElementById('modal-read');
+  const blocksWrap = document.getElementById('modal-blocks');
+  document.getElementById('modal-hint').textContent = HINTS[levelIndex];
+  if(ch.type === 'build'){
+    document.getElementById('modal-label').textContent = 'Make this number with blocks!';
+    document.getElementById('modal-sound').textContent = ch.target;
+    document.getElementById('modal-sound').style.display = '';
+    buildWrap.innerHTML = '';
+    placesForLevel(levelIndex).forEach(p => buildWrap.appendChild(placeCol(p[0], p[1], 9, true)));
+    buildWrap.style.display = '';
+    readWrap.style.display = 'none';
+  } else {
+    document.getElementById('modal-label').textContent = 'What number do the blocks show?';
+    document.getElementById('modal-sound').style.display = 'none';
+    const d = digitsOf(ch.target);
+    blocksWrap.innerHTML = '';
+    placesForLevel(levelIndex).forEach(p => {
+      const count = p[1] === 'mab-h' ? d.h : p[1] === 'mab-t' ? d.t : d.u;
+      blocksWrap.appendChild(placeCol(p[0], p[1], count, false));
+    });
+    buildWrap.style.display = 'none';
+    readWrap.style.display = '';
+  }
+  mInput.value = '';
+  mInput.classList.remove('wrong');
+  mFeedback.textContent = '';
+  mFeedback.className = 'feedback';
+  modal.classList.add('show');
+  if(ch.type === 'read'){ setTimeout(()=>mInput.focus(), 60); }
+}
+function builtValue(){
+  let v = 0;
+  document.querySelectorAll('#modal-build .mab-h:not(.off)').forEach(()=>{ v += 100; });
+  document.querySelectorAll('#modal-build .mab-t:not(.off)').forEach(()=>{ v += 10; });
+  document.querySelectorAll('#modal-build .mab-u:not(.off)').forEach(()=>{ v += 1; });
+  return v;
+}
+function checkAnswer(){
+  const ch = currentBox.ch;
+  let ok;
+  if(ch.type === 'build'){
+    ok = builtValue() === ch.target;
+  } else {
+    const v = parseInt(mInput.value, 10);
+    ok = mInput.value.trim() !== '' && v === ch.target;
+  }
+  if(ok){
+    Sound.correct();
+    mFeedback.textContent = '\u2713 ' + ch.target + ' \u2014 well done!';
+    mFeedback.className = 'feedback ok';
+    currentBox.done = true;
+    currentBox.el.classList.add('done');
+    currentBox.el.querySelector('.q').textContent = '\u2713';
+    recordAnswer(ch);
+    updateHud();
+    setTimeout(()=>{
+      modal.classList.remove('show');
+      if(boxes.every(b=>b.done)) levelComplete();
+    }, 700);
+  } else {
+    mInput.classList.add('wrong');
+    mFeedback.textContent = ch.type === 'build'
+      ? 'Not quite \u2014 count your blocks and try again!'
+      : 'Not quite \u2014 count the blocks and try again!';
+    mFeedback.className = 'feedback no';
+    setTimeout(()=>mInput.classList.remove('wrong'), 350);
+  }
+}
+document.getElementById('modal-submit').addEventListener('click', checkAnswer);
+mInput.addEventListener('keydown', e=>{ if(e.key==='Enter') checkAnswer(); });
+
+/* ------------- Level complete / win ------------- */
+const LEVEL_MSGS = [
+  { t:'LEVEL UP!', s:"You smashed Level 1! \ud83c\udf89 Get ready for Level 2 \u2014 tens and units ahead!" },
+  { t:'LEVEL UP!', s:"Brilliant! Level 2 done. \ud83d\ude80 Level 3 is the big one \u2014 hundreds, here we come!" }
+];
+function levelComplete(){
+  confettiBurst();
+  Sound.stopMusic();
+  Sound.fanfare();
+  if(levelIndex < LEVEL_COUNT - 1){
+    const m = LEVEL_MSGS[levelIndex];
+    showBig('level', m.t, m.s, 'Next Level', ()=>{ levelIndex++; hideBig(); buildLevel(); });
+  } else {
+    showBig('win', '\ud83c\udfc6 YOU WIN! \ud83c\udfc6',
+      "Amazing work! You slammed every box and finished all three levels. You're a true Maths Champion!",
+      'Play Again', ()=>{ levelIndex = 0; hideBig(); buildLevel(); });
+  }
+}
+
+const big = document.getElementById('bigmsg');
+function showBig(kind, title, sub, btn, onClick){
+  big.className = kind + ' show';
+  document.getElementById('bigmsg-title').textContent = title;
+  document.getElementById('bigmsg-sub').textContent = sub;
+  const b = document.getElementById('bigmsg-btn');
+  b.textContent = btn; b.onclick = onClick;
+}
+function hideBig(){ big.className = ''; }
+
+/* ------------- Confetti ------------- */
+function confettiBurst(){
+  const colors = ['#ffd23f','#e52521','#5c94fc','#00a800','#ff7ad9','#ff9c33'];
+  for(let i=0;i<70;i++){
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.style.left = Math.random()*100 + 'vw';
+    c.style.background = colors[i%colors.length];
+    c.style.animationDuration = (1.6 + Math.random()*1.4) + 's';
+    c.style.animationDelay = (Math.random()*0.4) + 's';
+    if(Math.random()>0.5) c.style.borderRadius='50%';
+    document.body.appendChild(c);
+    setTimeout(()=>c.remove(), 3400);
+  }
+}
+
+/* ------------- Start ------------- */
+document.querySelectorAll('.level-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    Sound.ensure();   // unlock audio on first user gesture
+    levelIndex = parseInt(btn.dataset.level, 10);
+    ringCount = 0;
+    achievements.length = 0;   // fresh run
+    updateRings();
+    document.getElementById('start').style.display='none';
+    running = true;
+    buildLevel();
+  });
+});
+
+// sound on/off toggle
+document.getElementById('hud-sound').addEventListener('click', ()=>{
+  const on = Sound.toggle();
+  const el = document.getElementById('hud-sound');
+  el.innerHTML = on ? '\uD83D\uDD0A' : '\uD83D\uDD07';
+  el.classList.toggle('off', !on);
+});
+
+/* ------------- Certificate / print ------------- */
+function buildCertificate(){
+  document.getElementById('cert-name').textContent = playerName || 'Maths Star';
+  const classEl = document.getElementById('cert-class');
+  classEl.textContent = playerClass ? 'Class ' + playerClass : '';
+  classEl.style.display = playerClass ? 'block' : 'none';
+
+  const levelsTouched = [...new Set(achievements.map(a=>a.level))].sort();
+  const stats = achievements.length + ' number' + (achievements.length===1?'':'s') + ' solved' +
+                ' \u2022 ' + ringCount + ' rings collected' +
+                (levelsTouched.length ? ' \u2022 Level' + (levelsTouched.length>1?'s ':' ') + levelsTouched.join(', ') : '');
+  document.getElementById('cert-stats').textContent = stats;
+
+  const wrap = document.getElementById('cert-words');
+  wrap.innerHTML = '';
+  if(achievements.length === 0){
+    wrap.innerHTML = '<div class="cert-chip"><span class="w">Play a level to earn your numbers!</span></div>';
+  } else {
+    achievements.forEach(a=>{
+      const chip = document.createElement('div');
+      chip.className = 'cert-chip';
+      chip.innerHTML = '<span class="s">'+a.target+'</span><span class="w">'+(a.type==='build'?'built':'read')+'</span>';
+      wrap.appendChild(chip);
+    });
+  }
+
+  const d = new Date();
+  document.getElementById('cert-date').textContent =
+    d.toLocaleDateString('en-AU', { day:'numeric', month:'long', year:'numeric' });
+}
+
+function doPrint(){
+  buildCertificate();
+  Sound.stopMusic();
+  setTimeout(()=>window.print(), 60);
+}
+
+// name prompt then print
+const nameAsk = document.getElementById('nameAsk');
+function askNameThenPrint(){
+  document.getElementById('nameInput').value = playerName;
+  document.getElementById('classInput').value = playerClass;
+  nameAsk.classList.add('show');
+  setTimeout(()=>document.getElementById('nameInput').focus(), 60);
+}
+document.getElementById('namePrint').addEventListener('click', ()=>{
+  playerName = document.getElementById('nameInput').value.trim();
+  playerClass = document.getElementById('classInput').value.trim();
+  nameAsk.classList.remove('show');
+  doPrint();
+});
+document.getElementById('nameSkip').addEventListener('click', ()=>{
+  nameAsk.classList.remove('show');
+  doPrint();
+});
+document.getElementById('nameInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter'){ document.getElementById('classInput').focus(); }
+});
+document.getElementById('classInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter'){ document.getElementById('namePrint').click(); }
+});
+
+document.getElementById('hud-print').addEventListener('click', askNameThenPrint);
+document.getElementById('bigmsg-print').addEventListener('click', askNameThenPrint);
+
+// number pad for read mode (touch friendly)
+(function(){
+  const pad = document.getElementById('numPad');
+  '1 2 3 4 5 6 7 8 9 \u232b 0 \u21b5'.split(' ').forEach(k=>{
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = k;
+    b.addEventListener('click', ()=>{
+      if(k === '\u232b'){ mInput.value = mInput.value.slice(0,-1); }
+      else if(k === '\u21b5'){ checkAnswer(); return; }
+      else if(mInput.value.length < 3){ mInput.value += k; }
+    });
+    pad.appendChild(b);
+  });
+})();
+
+// debug/test handle
+window.dbg = {
+  get px(){ return px; }, set px(v){ px = v; updateCamera(); },
+  get py(){ return py; },
+  get level(){ return levelIndex; },
+  boxes: ()=>boxes, rings: ()=>rings,
+  openModal, checkAnswer, builtValue, randTarget, makeChallenges,
+  achievements, jump
+};
+
+window.addEventListener('resize', ()=>{ if(running) updateCamera(); });
+</script>
+</body>
+</html>
